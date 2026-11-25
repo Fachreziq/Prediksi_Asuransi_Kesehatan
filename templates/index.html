@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediksi Biaya Asuransi Kesehatan - Regresi Linear</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-content">
+            <div>
+                <h1>Sistem Prediksi & Klasifikasi Biaya Asuransi Kesehatan</h1>
+                <p>Metode: Multiple Linear Regression (Usia, BMI, dan Kebiasaan Merokok)</p>
+            </div>
+            <button id="retrainBtn" class="btn-outline" onclick="retrainModel()">Latih Ulang Model CSV</button>
+        </div>
+    </header>
+
+    <main class="container main-grid">
+        <!-- Kolom Kiri: Form Input -->
+        <section class="card">
+            <h2>Input Data Nasabah</h2>
+            <p class="subtitle">Masukkan parameter usia, indeks massa tubuh (BMI), dan status merokok untuk menghitung estimasi biaya asuransi.</p>
+            
+            <form method="POST" action="/">
+                <div class="form-group">
+                    <label for="age">Usia (Tahun)</label>
+                    <input type="number" id="age" name="age" min="18" max="100" step="1" required 
+                           placeholder="Contoh: 32" value="{{ form_data.age }}">
+                    <small>Rentang dataset standar: 18 - 64 tahun</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="bmi">Indeks Massa Tubuh / BMI (kg/m²)</label>
+                    <input type="number" id="bmi" name="bmi" min="10" max="65" step="0.01" required 
+                           placeholder="Contoh: 26.5" value="{{ form_data.bmi }}">
+                    <small>Normal: 18.5 – 24.9 | Overweight: 25.0 – 29.9 | Obesitas: &ge; 30.0</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="smoker">Kebiasaan Merokok</label>
+                    <select id="smoker" name="smoker" required>
+                        <option value="no" {% if form_data.smoker == 'no' %}selected{% endif %}>Tidak Merokok (No)</option>
+                        <option value="yes" {% if form_data.smoker == 'yes' %}selected{% endif %}>Perokok Aktif (Yes)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="kurs">Kurs Konversi USD ke IDR (Opsional)</label>
+                    <input type="number" id="kurs" name="kurs" min="1000" step="100" required 
+                           value="{{ form_data.kurs }}">
+                </div>
+
+                <button type="submit" class="btn-primary">Hitung Prediksi & Klasifikasi</button>
+            </form>
+
+            <!-- Kalkulator Bantu BMI -->
+            <div class="bmi-helper">
+                <h3>Bantu Hitung BMI</h3>
+                <div class="helper-row">
+                    <input type="number" id="berat" placeholder="Berat (kg)" min="20" max="250">
+                    <input type="number" id="tinggi" placeholder="Tinggi (cm)" min="100" max="230">
+                    <button type="button" class="btn-secondary" onclick="hitungBMI()">Isi BMI</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Kolom Kanan: Hasil Prediksi & Evaluasi Model -->
+        <section class="right-column">
+            {% if result %}
+                {% if result.error %}
+                    <div class="card alert-error">{{ result.error }}</div>
+                {% else %}
+                    <div class="card result-card">
+                        <div class="result-header">
+                            <h2>Hasil Prediksi & Klasifikasi Biaya</h2>
+                            <span class="badge badge-{{ result.klasifikasi.badge }}">
+                                {{ result.klasifikasi.kategori }}
+                            </span>
+                        </div>
+
+                        <div class="price-box">
+                            <div class="price-item">
+                                <span>Estimasi Biaya Tahunan (USD)</span>
+                                <strong>{{ result.usd }}</strong>
+                            </div>
+                            <div class="price-item">
+                                <span>Estimasi dalam Rupiah (IDR)</span>
+                                <strong>{{ result.idr }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="classification-detail">
+                            <p><strong>Analisis Klasifikasi:</strong> {{ result.klasifikasi.deskripsi }}</p>
+                            <p><strong>Rekomendasi:</strong> {{ result.klasifikasi.rekomendasi }}</p>
+                        </div>
+
+                        <h3>Rincian Kontribusi Variabel Regresi</h3>
+                        <table class="breakdown-table">
+                            <thead>
+                                <tr>
+                                    <th>Variabel Input</th>
+                                    <th>Nilai Input</th>
+                                    <th>Kontribusi Biaya</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Konstanta (Intercept)</td>
+                                    <td>-</td>
+                                    <td>${{ result.breakdown.intercept }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Usia (Age)</td>
+                                    <td>{{ result.age }} tahun</td>
+                                    <td>{{ result.breakdown.usia }}</td>
+                                </tr>
+                                <tr>
+                                    <td>BMI ({{ result.bmi_status }})</td>
+                                    <td>{{ result.bmi }}</td>
+                                    <td>{{ result.breakdown.bmi }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Status Merokok</td>
+                                    <td>{{ result.smoker_label }}</td>
+                                    <td>{{ result.breakdown.smoker }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="card empty-state">
+                    <h2>Siap Melakukan Prediksi</h2>
+                    <p>Silakan isi formulir di sebelah kiri dan klik <strong>Hitung Prediksi & Klasifikasi</strong> untuk melihat estimasi biaya asuransi kesehatan beserta kategori risikonya.</p>
+                </div>
+            {% endif %}
+
+            <!-- Informasi Model Regresi Linear -->
+            <div class="card metrics-card">
+                <h2>Parameter & Evaluasi Model Regresi Linear</h2>
+                <div class="formula-box">
+                    <code>Y = {{ metrics.intercept }} + ({{ metrics.coef_age }} &times; Usia) + ({{ metrics.coef_bmi }} &times; BMI) + ({{ metrics.coef_smoker }} &times; Merokok)</code>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <span>Akurasi (R&sup2; Score)</span>
+                        <strong>{{ (metrics.r2_score * 100) | round(2) }}%</strong>
+                    </div>
+                    <div class="metric-item">
+                        <span>MAE</span>
+                        <strong>${{ "{:,.2f}".format(metrics.mae) }}</strong>
+                    </div>
+                    <div class="metric-item">
+                        <span>RMSE</span>
+                        <strong>${{ "{:,.2f}".format(metrics.rmse) }}</strong>
+                    </div>
+                </div>
+                <p class="threshold-note">
+                    <strong>Aturan Klasifikasi Kuantil Dataset:</strong> 
+                    Rendah (&lt; ${{ "{:,.2f}".format(metrics.q1_threshold) }}) &bull; 
+                    Sedang (${{ "{:,.2f}".format(metrics.q1_threshold) }} – ${{ "{:,.2f}".format(metrics.q2_threshold) }}) &bull; 
+                    Tinggi (&ge; ${{ "{:,.2f}".format(metrics.q2_threshold) }})
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function hitungBMI() {
+            const berat = parseFloat(document.getElementById('berat').value);
+            const tinggiCm = parseFloat(document.getElementById('tinggi').value);
+            if (berat > 0 && tinggiCm > 0) {
+                const tinggiM = tinggiCm / 100;
+                const bmi = (berat / (tinggiM * tinggiM)).toFixed(2);
+                document.getElementById('bmi').value = bmi;
+            } else {
+                alert("Masukkan berat badan (kg) dan tinggi badan (cm) yang valid.");
+            }
+        }
+
+        function retrainModel() {
+            const btn = document.getElementById('retrainBtn');
+            btn.disabled = true;
+            btn.innerText = "Melatih Model...";
+            fetch('/retrain', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message);
+                    window.location.reload();
+                })
+                .catch(err => {
+                    alert("Gagal melatih ulang model: " + err);
+                    btn.disabled = false;
+                    btn.innerText = "Latih Ulang Model CSV";
+                });
+        }
+    </script>
+</body>
+</html>
